@@ -1,0 +1,50 @@
+"""
+Experiment 1b
+Try different training set sizes. The original paper uses the entire 70000 MNIST data set. 
+We should experiment with how varying the size of the initial training affects performance. 
+For some of our experiments we will need a test set, so we should at least hold out the 
+10000 MNIST test set subjects reducing the training set size to 60000 subjects.
+"""
+import sys
+import numpy as np
+from time import time
+from keras.optimizers import SGD
+sys.path.insert(0,'../')
+from DEC import DEC, ClusteringLayer, cluster_acc
+from datasets import load_mnist
+
+def main():
+  n_clusters = 10 # this is chosen based on prior knowledge of classes in the data set.
+  batch_size = 256
+  lr         = 0.01 # learning rate
+  momentum   = 0.9
+  # tolerance - if clustering stops if less than this fraction of the data changes cluster on an interation
+  tol        = 0.001
+  
+  maxiter         = 2e4
+  update_interval = 140
+  save_dir         = './results/dec'
+  
+  x, y = load_mnist()
+
+  training_set_sizes = [100]
+  #training_set_sizes = [100, 500, 1000, 5000, 10000, 50000]
+  # prepare the DEC model
+  dec = DEC(dims=[x.shape[-1], 500, 500, 2000, 10], n_clusters=n_clusters, batch_size=batch_size)
+
+  for training_set_size in training_set_sizes:
+    x_train = x[:training_set_size]
+    y_train = y[:training_set_size]
+    ae_weights = './ae_weights_m%d.h5' % training_set_size
+    dec.initialize_model(optimizer=SGD(lr=lr, momentum=momentum),
+                                       ae_weights=ae_weights,
+                                       x=x_train)
+    t0 = time()
+    y_pred = dec.clustering(x_train, y=y_train, tol=tol, maxiter=maxiter,
+                            update_interval=update_interval, save_dir=save_dir+'/%d'%training_set_size)
+    
+    print('clustering time: ', (time() - t0))
+    print('acc:', cluster_acc(y_train, y_pred))
+
+if __name__ == '__main__':
+  main()
