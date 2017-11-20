@@ -1,0 +1,3 @@
+[submodule "DEC-keras"]
+	path = DEC-keras
+	url = https://github.com/dwright04/DEC-keras.git
