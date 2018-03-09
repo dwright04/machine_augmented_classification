@@ -49,6 +49,10 @@
             </ul>
           <li>Selecting Queries</li>
           <li>Mapping Clusters to Labels</li>
+          <li>Building the Training Set</li>
+            <ul style="list-style-type:square">
+              <li>Concatentation of Labelled Examples</li>
+            </ul>
         </ul>
       </p>
     <h3>Datasets</h3>
@@ -64,18 +68,18 @@
     <h3>Implementation</h3>
   <h2>Experimental Results</h2>
     <h3>Unsupervised Clustering</h3>
-      <p>How does the completely unsupervised approach perform across the data sets for which we have a validation set? So performance for MNIST, CIFAR-10 and Supernova Hunters.  Muon Hunters is considered here as we have not gold standard data set.  It is "held out" as a real test example of the approach.
+      <p>How does the completely unsupervised approach perform across the data sets for which we have a validation set? So performance for MNIST, CIFAR-10 and Supernova Hunters.  Muon Hunters is considered here as we have not gold standard data set, it is "held out" as a real test example of the approach.
       </p>
       <p>What are the implications for the different data sets.
       </p>
       <p>Tables
         <ul style="list-style-type:square">
-          <li>Showing performance for each of the 3 data sets measured on validation set.</li>
+          <li>Showing performance for each of the 3 data sets measured on respective validation sets.</li>
         </ul>
       </p>
       <p>Plots
         <ul style="list-style-type:square">
-          <li>Example of e.g. 5 clusters from each of the 3 data sets</li>
+          <li>Examples of e.g. 5 clusters from each of the 3 data sets</li>
         </ul>
       </p>
     <h3></h3>
@@ -85,10 +89,36 @@
       <p>In order to better understand our approach we perform tests to disentangle the contribution to the performance of several implementation choices.
         <ul style="list-style-type:circle">
           <li>Batch Size for Model Updates</li>
+            <p>Plots
+              <ul style="list-style-type:square">
+                <li>3 plots showing learning curves with batches of different sizes.</li>
+              </ul>
+            </p>
           <li>Number of Clusters</li>
+            <p>Tables
+              <ul style="list-style-type:square">
+                <li>Final performance of the approach on all 3 data sets with 4 different cluster sizes e.g. n_classes, 10, 100 and 1000</li>
+              </ul>
+            </p>
+        </ul>
+      </p>
+    <h3>Test Set Results</h3>
+      <p>Tables
+        <ul style="list-style-type:square">
+          <li>Showing performance for each of the 3 data sets measured on respective test sets.</li>
+        </ul>
+      </p>
+      <p>Plots
+        <ul style="list-style-type:square">
+          <li>Examples of e.g. 5 clusters from each of the 3 test sets</li>
         </ul>
       </p>
     <h3>Real-World Application</h3>
+      <p>
+        <ul style="list-style-type:circle">
+          <li></li>
+        </ul>
+      </p>
   <h2>Discussion</h2>
   <h2>Conclusions</h2>
 </dt-article>
