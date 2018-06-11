@@ -8,6 +8,7 @@ from sklearn.metrics import f1_score
 from keras.models import Model
 from keras.optimizers import SGD
 from keras.callbacks import ModelCheckpoint
+from keras.utils import np_utils
 
 sys.path.insert(0,'../../../../DEC-keras')
 from DEC import DEC
@@ -18,6 +19,7 @@ from dissolving_utils import pca_plot, FrameDumpCallback, percent_fpr
 
 sys.path.insert(0,'../')
 from siamese_utils import get_pairs_auto, get_pairs_auto_with_noise, train_siamese, train_siamese_online
+from siamese_utils import get_pairs_triplet_selection, train_siamese_triplet_selection
 
 def load_snhunters_dec(x, ae_weights, dec_weights, n_clusters, batch_size, lr, \
                    momentum):
@@ -30,8 +32,56 @@ def load_snhunters_dec(x, ae_weights, dec_weights, n_clusters, batch_size, lr, \
   dec.model.summary()
   return dec
 
-def main():
+def calc_f1_score(y_true, predicted_clusters, cluster_to_label_mapping):
+  y_pred = []
+  for i in range(len(y_true)):
+    y_pred.append(cluster_to_label_mapping[predicted_clusters[i]])
+  return f1_score(y_true, np.array(y_pred))
 
+def get_cluster_to_label_mapping_safe(y, y_pred, n_classes, n_clusters):
+  """Enusre at least one cluster assigned to each label.
+  """
+  one_hot_encoded = np_utils.to_categorical(y, n_classes)
+
+  cluster_to_label_mapping = []
+  n_assigned_list = []
+  majority_class_fractions = []
+  majority_class_pred = np.zeros(y.shape)
+  for cluster in range(n_clusters):
+    cluster_indices = np.where(y_pred == cluster)[0]
+    n_assigned_examples = cluster_indices.shape[0]
+    n_assigned_list.append(n_assigned_examples)
+    cluster_labels = one_hot_encoded[cluster_indices]
+    cluster_label_fractions = np.mean(cluster_labels, axis=0)
+    majority_cluster_class = np.argmax(cluster_label_fractions)
+    cluster_to_label_mapping.append(majority_cluster_class)
+    majority_class_pred[cluster_indices] += majority_cluster_class
+    majority_class_fractions.append(cluster_label_fractions[majority_cluster_class])
+    print(cluster, n_assigned_examples, majority_cluster_class, cluster_label_fractions[majority_cluster_class])
+  #print(cluster_to_label_mapping)
+
+  print(np.unique(y), np.unique(cluster_to_label_mapping))
+  try:
+    # make sure there is at least 1 cluster representing each class
+    assert np.all(np.unique(y) == np.unique(cluster_to_label_mapping))
+  except AssertionError:
+    # if there is no cluster for a class then we will assign a cluster to that
+    # class
+    
+    # find which class it is
+    # ASSUMPTION - this task is binary
+    
+    diff = list(set(np.unique(y)) - set(np.unique(cluster_to_label_mapping)))[0]
+      # we choose the cluster that contains the most examples of the class with no cluster
+      
+    one_hot = np_utils.to_categorical(y_pred[np.where(y==diff)[0]], \
+                                        len(cluster_to_label_mapping))
+                                      
+    cluster_to_label_mapping[np.argmax(np.sum(one_hot, axis=0))] = int(diff)
+  print(cluster_to_label_mapping)
+  return cluster_to_label_mapping, n_assigned_list, majority_class_fractions
+
+def test():
   # constants
   batch_size = 256
   lr         = 0.01
@@ -197,6 +247,192 @@ def main():
     yp.append(cluster_to_label_mapping[y_pred[i]])
   print(percent_fpr(y_test, np.array(yp), percent))
   print(f1_score(y_test, np.array(yp)))
+
+def volunteer_classification_test():
+  # constants
+  batch_size = 256
+  lr         = 0.01
+  momentum   = 0.9
+  tol        = 0.001
+  maxiter         = 2e4
+  update_interval = 140
+
+  n_clusters = 10
+  n_classes  = 2
+
+  lcolours = ['#D6FF79', '#B0FF92', '#A09BE7', '#5F00BA', '#56CBF9', \
+              '#F3C969', '#ED254E', '#CAA8F5', '#D9F0FF', '#46351D']
+              
+  labels = [str(i) for i in range(n_clusters)]
+  
+  ae_weights  = '../../../../DEC-keras/results/snh/ae_weights_snh.h5'
+  dec_weights = '../../../../DEC-keras/results/snh/%d/DEC_model_final.h5'%n_clusters
+
+  percent = 0.1 # for figure of merit
+
+  # load snhunters data set
+  data = sio.loadmat('../../../../data/snhunters/zooniverse_test_set.mat')
+  x_valid = np.nan_to_num(np.reshape(data['x'], (data['x'].shape[0], 400), order='F'))
+  y_valid  = np.squeeze(data['y'])
+  # split the data into training, validation and test sets
+
+  # load pretrained DEC model
+  dec = load_snhunters_dec(x_valid, ae_weights, dec_weights, n_clusters, \
+    batch_size, lr, momentum)
+
+  cluster_centres = get_cluster_centres(dec)
+
+  query_limit = 128
+  for i in range(1,239):
+    data = \
+      sio.loadmat('../../../../data/snhunters/3pi_20x20_supernova_hunters_batch_%d_signPreserveNorm_detect_misaligned.mat'%(i))
+    x = np.nan_to_num(np.reshape(data['X'], (data['X'].shape[0], 400), order='C'))
+    y = np.squeeze(data['y'])
+
+    #pca_plot(dec.encoder, x_train, cluster_centres, y=y_train, labels=labels, \
+    #         lcolours=lcolours)
+
+    #pca_plot(dec.encoder, x, cluster_centres, y=y, labels=labels, \
+    #         lcolours=lcolours)
+
+    y_pred = dec.predict_clusters(x)
+  
+    cluster_to_label_mapping, n_assigned_list, majority_class_fractions = \
+      get_cluster_to_label_mapping(y, y_pred, n_classes, n_clusters)
+
+    n_batches = 20
+    batch_size = int(len(x)/n_batches)
+    print(batch_size)
+    for j in range(n_batches):
+      x_b = x[j*batch_size:(j+1)*batch_size]
+      y_b = y[j*batch_size:(j+1)*batch_size]
+      im, cc, ls, cluster_to_label_mapping = \
+        get_pairs_auto(dec, x_b, y_b, cluster_centres, cluster_to_label_mapping, \
+                       majority_class_fractions, n_clusters)
+      
+      callbacks = []
+  
+      model, base_network = train_siamese(dec, cluster_centres, im, cc, ls, \
+        epochs=1, split_frac=1.0, callbacks=callbacks)
+
+      y_pred = dec.predict_clusters(x_valid)
+
+      yp = []
+      for i in range(len(y_pred)):
+        yp.append(cluster_to_label_mapping[y_pred[i]])
+      print(f1_score(y_valid, np.array(yp)), percent_fpr(y_valid, np.array(yp), percent))
+
+def volunteer_classification_triplet_selection_test(n):
+  # constants
+  batch_size = 256
+  lr         = 0.01
+  momentum   = 0.9
+  tol        = 0.001
+  maxiter         = 2e4
+  update_interval = 140
+
+  n_clusters = 10
+  n_classes  = 2
+
+  lcolours = ['#D6FF79', '#B0FF92', '#A09BE7', '#5F00BA', '#56CBF9', \
+              '#F3C969', '#ED254E', '#CAA8F5', '#D9F0FF', '#46351D']
+              
+  labels = [str(i) for i in range(n_clusters)]
+  
+  ae_weights  = '../../../../DEC-keras/results/snh/ae_weights_snh.h5'
+  dec_weights = '../../../../DEC-keras/results/snh/%d/DEC_model_final.h5'%n_clusters
+
+  percent = 0.1 # for figure of merit
+
+  # load snhunters data set
+  data = sio.loadmat('../../../../data/snhunters/zooniverse_test_set.mat')
+  x_valid = np.nan_to_num(np.reshape(data['x'], (data['x'].shape[0], 400), order='F'))
+  y_valid  = np.squeeze(data['y'])
+  # split the data into training, validation and test sets
+
+  # load pretrained DEC model
+  dec = load_snhunters_dec(x_valid, ae_weights, dec_weights, n_clusters, \
+    batch_size, lr, momentum)
+  cluster_centres = get_cluster_centres(dec)
+  #limit = 1024
+  limit=None
+  #limit=128
+  for i in range(1,n+1):
+    data = \
+      sio.loadmat('../../../../data/snhunters/3pi_20x20_supernova_hunters_batch_%d_signPreserveNorm_detect_misaligned.mat'%(i))
+    x = np.nan_to_num(np.reshape(data['X'], (data['X'].shape[0], 400), order='C'))
+    y = np.squeeze(data['y'])
+
+    u, indices = np.unique(x, return_index=True, axis=0)
+    x = x[indices][:limit]
+    y = y[indices][:limit]
+    try:
+      X = np.concatenate((X,x))
+      Y = np.concatenate((Y,y))
+    except UnboundLocalError:
+      X = x
+      Y = y
+  u, indices = np.unique(X, return_index=True, axis=0)
+  x = X[indices]
+  y = Y[indices]
+  del X
+  del Y
+
+  pca_plot(dec.encoder, x, cluster_centres, y=y, \
+    labels=[str(i) for i in range(n_clusters)], lcolours=[lcolours[0], lcolours[5]])
+    
+  cluster_to_label_mapping, n_assigned_list, majority_class_fractions = \
+    get_cluster_to_label_mapping_safe(y, dec.predict_clusters(x), n_classes, n_clusters)
+    
+  calc_f1_score(y, dec.predict_clusters(x), cluster_to_label_mapping)
+
+  limit = 2056
+  for iter in range(100):
+    m = x.shape[0]
+    selection = np.random.permutation(m)[:limit]
+    pairs, labels = get_pairs_triplet_selection(dec, \
+                                                x[selection], \
+                                                y[selection],
+                                                dec.predict_clusters(x[selection]), \
+                                                cluster_to_label_mapping)
+
+    print(pairs.shape)
+    print(labels.shape)
+
+    m = pairs.shape[0]
+    order = np.random.permutation(m)
+    pairs = pairs[order]
+    labels = labels[order]
+    
+    train_siamese_triplet_selection(dec, pairs, labels, 'sgd', epochs=10, callbacks=[], split_frac=.75)
+
+    dec.clustering(x[selection], save_dir='./tmp')
+    
+    _, n_assigned_list, majority_class_fractions = \
+      get_cluster_to_label_mapping_safe(y, dec.predict_clusters(x), n_classes, n_clusters)
+    
+    print(calc_f1_score(y, dec.predict_clusters(x), cluster_to_label_mapping))
+    print(calc_f1_score(y[selection], dec.predict_clusters(x[selection]), cluster_to_label_mapping))
+
+    c_purities = np.mean(np.array(np.nan_to_num(majority_class_fractions)) \
+               * np.array(n_assigned_list) \
+               / float(x[selection].shape[0])+1e-9)
+    print(c_purities)
+
+    cluster_centres = get_cluster_centres(dec)
+    pca_plot(dec.encoder, x, cluster_centres, y=y, \
+      labels=[str(i) for i in range(n_clusters)], lcolours=[lcolours[0], lcolours[5]])
+
+
+  cluster_to_label_mapping, n_assigned_list, majority_class_fractions = \
+    get_cluster_to_label_mapping_safe(y_valid, dec.predict_clusters(x_valid), n_classes, n_clusters)
+  cluster_centres = get_cluster_centres(dec)
+  pca_plot(dec.encoder, x_valid, cluster_centres, y=y_valid, \
+    labels=[str(i) for i in range(n_clusters)], lcolours=[lcolours[0], lcolours[5]])
+
+def main():
+  #volunteer_classification_test()
+  volunteer_classification_triplet_selection_test(10)
 
 if __name__ == '__main__':
   main()
