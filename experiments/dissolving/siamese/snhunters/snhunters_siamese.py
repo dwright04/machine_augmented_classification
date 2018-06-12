@@ -386,7 +386,7 @@ def volunteer_classification_triplet_selection_test(n):
     
   calc_f1_score(y, dec.predict_clusters(x), cluster_to_label_mapping)
 
-  limit = 2056
+  limit = 2048
   for iter in range(100):
     m = x.shape[0]
     selection = np.random.permutation(m)[:limit]
@@ -406,7 +406,7 @@ def volunteer_classification_triplet_selection_test(n):
     
     train_siamese_triplet_selection(dec, pairs, labels, 'sgd', epochs=10, callbacks=[], split_frac=.75)
 
-    dec.clustering(x[selection], save_dir='./tmp')
+    #dec.clustering(x[selection], save_dir='./tmp')
     
     _, n_assigned_list, majority_class_fractions = \
       get_cluster_to_label_mapping_safe(y, dec.predict_clusters(x), n_classes, n_clusters)
@@ -415,8 +415,8 @@ def volunteer_classification_triplet_selection_test(n):
     print(calc_f1_score(y[selection], dec.predict_clusters(x[selection]), cluster_to_label_mapping))
 
     c_purities = np.mean(np.array(np.nan_to_num(majority_class_fractions)) \
-               * np.array(n_assigned_list) \
-               / float(x[selection].shape[0])+1e-9)
+               * (np.array(n_assigned_list) \
+               / (float(x[selection].shape[0])+1e-9)))
     print(c_purities)
 
     cluster_centres = get_cluster_centres(dec)
