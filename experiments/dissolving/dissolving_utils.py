@@ -123,7 +123,7 @@ def get_cluster_centres(dec):
 def calculateAccuracy(y, y_pred):
   return 100*np.sum(y_pred == y) / len(y_pred)
 
-def precent_fpr(y_true, y_pred, percent=0.01):
+def percent_fpr(y_true, y_pred, percent=0.01):
   fpr, tpr, thresholds = roc_curve(y_true, y_pred)
   FoM = 1-tpr[np.where(fpr<=percent)[0][-1]] # MDR at 1% FPR
   return FoM
@@ -132,7 +132,7 @@ def pca_plot(base_network, x, cluster_centres, y=None, labels=[], \
              lcolours=[], ulcolour='#747777', ccolour='#4D6CFA'):
     
   pca = PCA(n_components=2)
-  x_pca = pca.fit_transform(base_network.predict(x))
+  x_pca = pca.fit_transform(np.nan_to_num(base_network.predict(x)))
   c_pca = pca.transform(cluster_centres)
   fig = plt.figure(figsize=(6,6))
   ax = fig.add_subplot(111)
@@ -143,18 +143,19 @@ def pca_plot(base_network, x, cluster_centres, y=None, labels=[], \
         color=ulcolour, alpha=0.1)
       unique_targets.remove(-1)
     for l in unique_targets:
-        ax.scatter(x_pca[np.where(y==l),0], x_pca[np.where(y==l),1], \
-          marker='o', s=20, color=lcolours[l], alpha=0.6, label=labels[l])
+        l = int(l)
+        ax.scatter(x_pca[np.where(y==l),0], x_pca[np.where(y==l),1], marker='o', s=5, \
+          color=lcolours[l], alpha=0.7, label=labels[l])
   else:
     ax.scatter(x_pca[:,0], x_pca[:,1], marker='o', s=20, \
-      color=ulcolour, alpha=0.1)
+      color=ulcolour, alpha=0.7)
   ax.scatter(c_pca[:,0], c_pca[:,1], marker='o', s=40, color=ccolour, \
     alpha=1.0, label='cluster centre')
 
   for i in range(len(cluster_centres)):
     ax.text(c_pca[i,0], c_pca[i,1], str(i), size=20)
   plt.axis('off')
-  plt.legend(ncol=3)
+  #plt.legend(ncol=2)
   plt.show()
 
 class FrameDumpCallback(keras.callbacks.Callback):
@@ -184,17 +185,7 @@ class FrameDumpCallback(keras.callbacks.Callback):
     ax = fig.add_subplot(111)
     if np.any(self.y):
       unique_targets = list(np.unique(self.y))
-      if -1 in unique_targets:
-        ax.scatter(x_pca[np.where(self.y==-1),0], \
-          x_pca[np.where(self.y==-1),1], marker='o', s=20, \
-          color=self.ulcolour, alpha=0.1)
-      
-        unique_targets.remove(-1)
-      for l in unique_targets:
-        ax.scatter(x_pca[np.where(self.y==l),0], \
-                   x_pca[np.where(self.y==l),1], \
-                   marker='o', s=20, color=self.lcolours[l], \
-                   alpha=0.6, label=self.labels[l])
+
     else:
       ax.scatter(x_pca[:,0], x_pca[:,1], marker='o', s=20, \
                  color=self.ulcolour, alpha=0.1)
@@ -204,5 +195,15 @@ class FrameDumpCallback(keras.callbacks.Callback):
     for i in range(len(self.cluster_centres)):
       ax.text(c_pca[i,0], c_pca[i,1], str(i), size=20)
     plt.axis('off')
-    plt.legend(ncol=3)
+    #plt.legend(ncol=3)
     plt.savefig(self.file_path+'/frame_%06d.png'%(self.epoch_incrementer))
+
+def load_dec(x, ae_weights, dec_weights, n_clusters, batch_size, lr, momentum):
+  dec = DEC(dims=[x.shape[-1], 500, 500, 2000, 10], n_clusters=n_clusters, batch_size=batch_size)
+  ae_weights = ae_weights
+  dec.initialize_model(optimizer=SGD(lr=lr, momentum=momentum),
+                       ae_weights=ae_weights,
+                       x=x, loss='kld')
+  dec.load_weights(dec_weights)
+  dec.model.summary()
+  return dec
