@@ -454,11 +454,11 @@ def volunteer_classification_triplet_selection_test(n):
 
   unlabelled_test_f1 = calc_f1_score(y_test, \
                                      dec.predict_clusters(x_test), \
-                                     cluster_to_label_mapping))
+                                     cluster_to_label_mapping)
   print(unlabelled_test_f1)
   unlabelled_test_f1 = calc_f1_score(y_test, \
                                      dec.predict_clusters(x_test), \
-                                     cluster_to_label_mapping_test))
+                                     cluster_to_label_mapping_test)
   print(unlabelled_test_f1)                                    
   #cluster_centres = get_cluster_centres(dec)
   #pca_plot(dec.encoder, x_test, cluster_centres, y=y_test, \
