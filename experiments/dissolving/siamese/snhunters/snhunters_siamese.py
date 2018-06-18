@@ -7,7 +7,7 @@ from sklearn.metrics import f1_score
 
 from keras.models import Model
 from keras.optimizers import SGD
-from keras.callbacks import ModelCheckpoint
+from keras.callbacks import ModelCheckpoint, CSVLogger
 from keras.utils import np_utils
 
 sys.path.insert(0,'../../../../DEC-keras')
@@ -323,6 +323,7 @@ def volunteer_classification_test():
       print(f1_score(y_valid, np.array(yp)), percent_fpr(y_valid, np.array(yp), percent))
 
 def volunteer_classification_triplet_selection_test(n):
+  np.random.seed(0)
   # constants
   batch_size = 256
   lr         = 0.01
@@ -349,14 +350,20 @@ def volunteer_classification_triplet_selection_test(n):
   x_valid = np.nan_to_num(np.reshape(data['x'], (data['x'].shape[0], 400), order='F'))
   y_valid  = np.squeeze(data['y'])
   # split the data into training, validation and test sets
+  order = np.random.permutation
+  x_valid = x_valid[order]
+  y_valid = y_valid[order]
+  split = int(x_valid.shape[0] / 2.)
+  x_test = x_valid[split:]
+  y_test = y_valid[split:]
+  x_valid = x_valid[:split]
+  y_valid = y_valid[:split]
 
   # load pretrained DEC model
   dec = load_snhunters_dec(x_valid, ae_weights, dec_weights, n_clusters, \
     batch_size, lr, momentum)
-  cluster_centres = get_cluster_centres(dec)
-  #limit = 1024
+  #cluster_centres = get_cluster_centres(dec)
   limit=None
-  #limit=128
   for i in range(1,n+1):
     data = \
       sio.loadmat('../../../../data/snhunters/3pi_20x20_supernova_hunters_batch_%d_signPreserveNorm_detect_misaligned.mat'%(i))
@@ -378,8 +385,8 @@ def volunteer_classification_triplet_selection_test(n):
   del X
   del Y
 
-  pca_plot(dec.encoder, x, cluster_centres, y=y, \
-    labels=[str(i) for i in range(n_clusters)], lcolours=[lcolours[0], lcolours[5]])
+  #pca_plot(dec.encoder, x, cluster_centres, y=y, \
+  #  labels=[str(i) for i in range(n_clusters)], lcolours=[lcolours[0], lcolours[5]])
     
   cluster_to_label_mapping, n_assigned_list, majority_class_fractions = \
     get_cluster_to_label_mapping_safe(y, dec.predict_clusters(x), n_classes, n_clusters)
@@ -387,6 +394,7 @@ def volunteer_classification_triplet_selection_test(n):
   calc_f1_score(y, dec.predict_clusters(x), cluster_to_label_mapping)
 
   limit = 2048
+  metric_log = open('./results/metric_logging.csv', 'w')
   for iter in range(100):
     m = x.shape[0]
     selection = np.random.permutation(m)[:limit]
@@ -404,31 +412,57 @@ def volunteer_classification_triplet_selection_test(n):
     pairs = pairs[order]
     labels = labels[order]
     
-    train_siamese_triplet_selection(dec, pairs, labels, 'sgd', epochs=10, callbacks=[], split_frac=.75)
+    callbacks = [CSVLogger('./results/training.log')]
+    _, val_split = train_siamese_triplet_selection(dec, \
+                                                   pairs, \
+                                                   labels, \
+                                                   'sgd', \
+                                                   epochs=10, \
+                                                   callbacks=callbacks, \
+                                                   split_frac=.75)
 
-    #dec.clustering(x[selection], save_dir='./tmp')
+    dec.clustering(x[selection], save_dir='./results/%d/'%(iter))
     
-    _, n_assigned_list, majority_class_fractions = \
+    #update the cluster to label mapping
+    cluster_to_label_mapping, n_assigned_list, majority_class_fractions = \
       get_cluster_to_label_mapping_safe(y, dec.predict_clusters(x), n_classes, n_clusters)
     
-    print(calc_f1_score(y, dec.predict_clusters(x), cluster_to_label_mapping))
-    print(calc_f1_score(y[selection], dec.predict_clusters(x[selection]), cluster_to_label_mapping))
-
+    val_f1 = calc_f1_score(y[selection][val_split:], \
+                           dec.predict_clusters(x[selection][val_split[:]]), \
+                           cluster_to_label_mapping))
+                           
+    train_f1 = calc_f1_score(y[selection][:val_split], \
+                             dec.predict_clusters(x[selection][:val_split]), \
+                             cluster_to_label_mapping))
+    
+    unlabelled_f1 = calc_f1_score(y_valid, \
+                             dec.predict_clusters(x_valid), \
+                             cluster_to_label_mapping))
+                             
     c_purities = np.mean(np.array(np.nan_to_num(majority_class_fractions)) \
                * (np.array(n_assigned_list) \
-               / (float(x[selection].shape[0])+1e-9)))
-    print(c_purities)
+               / (float(limit))))
 
-    cluster_centres = get_cluster_centres(dec)
-    pca_plot(dec.encoder, x, cluster_centres, y=y, \
-      labels=[str(i) for i in range(n_clusters)], lcolours=[lcolours[0], lcolours[5]])
+    metrics = [val_f1,train_f1,unlabelled_f1,c_purities]
+    #cluster_centres = get_cluster_centres(dec)
+    #pca_plot(dec.encoder, x, cluster_centres, y=y, \
+    #  labels=[str(i) for i in range(n_clusters)], lcolours=[lcolours[0], lcolours[5]])
+    metric_log.write((',').join(metrics))
+  metric_log.close()
+  cluster_to_label_mapping_test, n_assigned_list, majority_class_fractions = \
+    get_cluster_to_label_mapping_safe(y_test, dec.predict_clusters(x_test), n_classes, n_clusters)
 
-
-  cluster_to_label_mapping, n_assigned_list, majority_class_fractions = \
-    get_cluster_to_label_mapping_safe(y_valid, dec.predict_clusters(x_valid), n_classes, n_clusters)
-  cluster_centres = get_cluster_centres(dec)
-  pca_plot(dec.encoder, x_valid, cluster_centres, y=y_valid, \
-    labels=[str(i) for i in range(n_clusters)], lcolours=[lcolours[0], lcolours[5]])
+  unlabelled_test_f1 = calc_f1_score(y_test, \
+                                     dec.predict_clusters(x_test), \
+                                     cluster_to_label_mapping))
+  print(unlabelled_test_f1)
+  unlabelled_test_f1 = calc_f1_score(y_test, \
+                                     dec.predict_clusters(x_test), \
+                                     cluster_to_label_mapping_test))
+  print(unlabelled_test_f1)                                    
+  #cluster_centres = get_cluster_centres(dec)
+  #pca_plot(dec.encoder, x_test, cluster_centres, y=y_test, \
+  #  labels=[str(i) for i in range(n_clusters)], lcolours=[lcolours[0], lcolours[5]])
 
 def main():
   #volunteer_classification_test()
