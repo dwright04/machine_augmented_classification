@@ -229,10 +229,11 @@ def train_siamese_triplet_selection(dec, pairs, labels, optimizer, epochs=10, ca
 
   model.compile(loss='binary_crossentropy', optimizer=optimizer)
 
-  limit = int(split_frac*pairs.shape[0])
-  model.fit([pairs[:limit, 0], pairs[:limit, 1]], labels[:limit], \
-    validation_data=([pairs[limit:, 0], pairs[limit:, 1]], labels[limit:]), \
+  val_split = int(split_frac*pairs.shape[0])
+  model.fit([pairs[:val_split, 0], pairs[:val_split, 1]], labels[:val_split], \
+    validation_data=([pairs[val_split:, 0], pairs[val_split:, 1]], labels[val_split:]), \
     batch_size=256, epochs=epochs, callbacks=callbacks)
+  return model, val_split
 
 def train_siamese(dec, centres, im, cl, labels, epochs=50, \
                   split_frac=0.75, callbacks=[]):
