@@ -429,15 +429,15 @@ def volunteer_classification_triplet_selection_test(n):
     
     val_f1 = calc_f1_score(y[selection][val_split:], \
                            dec.predict_clusters(x[selection][val_split[:]]), \
-                           cluster_to_label_mapping))
+                           cluster_to_label_mapping)
                            
     train_f1 = calc_f1_score(y[selection][:val_split], \
                              dec.predict_clusters(x[selection][:val_split]), \
-                             cluster_to_label_mapping))
+                             cluster_to_label_mapping)
     
     unlabelled_f1 = calc_f1_score(y_valid, \
                              dec.predict_clusters(x_valid), \
-                             cluster_to_label_mapping))
+                             cluster_to_label_mapping)
                              
     c_purities = np.mean(np.array(np.nan_to_num(majority_class_fractions)) \
                * (np.array(n_assigned_list) \
