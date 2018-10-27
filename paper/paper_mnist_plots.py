@@ -35,11 +35,14 @@ def pca_plot(base_network, x, cluster_centres=None, y=None, labels=[], output_fi
   def onpick(event):
     print('picked')
     print(event.ind)
-    print(y[event.ind[0]])
+    #print(y[event.ind[0]])
+    dim = int(np.ceil(np.sqrt(len(event.ind))))
+    print(dim)
     fig = plt.figure()
-    ax = fig.add_subplot(111)
-    ax.imshow(np.reshape(x[event.ind[0]], (28,28)), cmap='gray_r')
-    plt.axis('off')
+    for i in range(len(event.ind)):
+      ax = fig.add_subplot(dim,dim,i+1)
+      ax.imshow(np.reshape(x[event.ind[i]], (28,28)), cmap='gray_r')
+      plt.axis('off')
     plt.show()
   
   pca = PCA(n_components=2)
